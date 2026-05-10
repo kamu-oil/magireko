@@ -164,7 +164,7 @@ function render(){
   const s8Num = (s8.success >= s8Theory.num) ? `<span style="color:red;font-weight:bold">${s8.success}</span>` : `<span>${s8.success}</span>`;
 
   // 250Gボーナス
-  const bonusTheory = stepScaleTheory(bonus.high,3,5);
+  const bonusTheory = stepScaleTheory(bonus.high,2,3);
   const bonusNum = (bonus.low >= bonusTheory.num) ? `<span style="color:red;font-weight:bold">${bonus.low}</span>` : `<span>${bonus.low}</span>`;
 
   analysis.innerHTML = `
