@@ -1,0 +1,184 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>マギレコ設定判別</title>
+</head>
+<body style="font-family:sans-serif; padding:16px; max-width:600px; margin:auto;">
+
+<div>
+  <div>今回の弱チェ間隔(G)</div>
+  <div style="margin-top:6px;">
+    <input id="input" type="number" min="1" style="width:100%; padding:10px; font-size:18px; box-sizing:border-box;">
+    <div style="display:flex; gap:8px; margin-top:8px;">
+      <button onclick="loadData()" style="flex:1; padding:12px;">読込</button>
+      <button onclick="saveData()" style="flex:1; padding:12px;">保存</button>
+      <button onclick="add()" style="flex:1; padding:12px;">記録</button>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:12px;">累計G: <span id="totalG">0</span></div>
+<div>平均出現率: <span id="avg">-</span></div>
+
+<hr>
+<div id="settings"></div>
+<hr>
+<div id="analysis"></div>
+
+<div style="display:flex; gap:8px; margin-top:10px;">
+  <button onclick="addBonusAll()" style="flex:1; padding:12px;">～250G</button>
+  <button onclick="addBonusHigh()" style="flex:1; padding:12px;">251G～</button>
+</div>
+
+<script>
+let history = [];
+let bonus = {low:0, high:0};
+const STORAGE_KEY = "magireco_history";
+
+const totalG = document.getElementById("totalG");
+const avg = document.getElementById("avg");
+const settings = document.getElementById("settings");
+const analysis = document.getElementById("analysis");
+const input = document.getElementById("input");
+
+/* 記録 */
+function add(){
+  const v = Number(input.value);
+  if(!Number.isFinite(v) || v <= 0){ input.value=""; return; }
+  history.push(v);
+  input.value="";
+  saveDataSilent();
+  render();
+}
+
+/* ボーナス */
+function addBonusAll(){ bonus.low++; bonus.high++; saveDataSilent(); render(); }
+function addBonusHigh(){ bonus.high++; saveDataSilent(); render(); }
+
+/* 保存/読込 */
+function saveData(){ localStorage.setItem(STORAGE_KEY, JSON.stringify({history, bonus})); alert("保存しました"); }
+function saveDataSilent(){ localStorage.setItem(STORAGE_KEY, JSON.stringify({history, bonus})); }
+function loadData(){
+  const data = localStorage.getItem(STORAGE_KEY);
+  if(!data){ alert("データなし"); return; }
+  try{
+    const obj = JSON.parse(data);
+    history = obj.history || [];
+    bonus = obj.bonus || {low:0,high:0};
+    render();
+    alert("読込しました");
+  }catch(e){ alert("読込失敗"); }
+}
+
+/* buildStreaks: 76G以内連カウント修正版
+   - 77G以上は , 出力
+   - 最初が77G以上 または 77G以上連続なら 0連を追加
+   - 途中単発77G以上は0連を追加しない */
+function buildStreaks(){
+  const result = [];
+  let cur = 0;
+  let prevWas77 = false;
+
+  for(let i=0;i<history.length;i++){
+    const x = history[i];
+    if(x>=77){
+      if(cur>0){ result.push(cur); cur=0; }
+      // 0連を追加する条件
+      if(i===0 || prevWas77){
+        result.push(0);
+      }
+      // 途中単発77G以上は何もしない
+      prevWas77 = true;
+    } else {
+      cur++;
+      prevWas77 = false;
+    }
+  }
+
+  if(cur>0) result.push(cur);
+
+  return result;
+}
+
+/* 76G連判定 */
+function countTier(n){
+  const s = buildStreaks();
+  return {success: s.filter(x=>x>=n).length, total: s.length};
+}
+
+/* 理論スケーリング */
+function stepScaleTheory(actualTotal, baseNum, baseDen){
+  if(actualTotal <= baseDen) return {text:`${baseNum}/${baseDen}`, num:baseNum};
+  const step = Math.ceil(actualTotal/baseDen);
+  return {text:`${baseNum*step}/${baseDen*step}`, num:baseNum*step};
+}
+
+/* 111Gハマリ */
+function calcHama(){ return history.filter(x=>x>=111).length; }
+
+/* 設定推定 */
+function calcSetting(){
+  const rates=[60,57.7,55.5,53.5,51.7,50];
+  let logs = rates.map(r=>{
+    const p=1/r;
+    return history.reduce((s,x)=>s+((x-1)*Math.log(1-p)+Math.log(p)),0);
+  });
+  const max = Math.max(...logs);
+  const exp = logs.map(v=>Math.exp(v-max));
+  const sum = exp.reduce((a,b)=>a+b,0);
+  return rates.map((r,i)=>{
+    const pct = history.length ? exp[i]/sum*100 : 0;
+    const isMax = history.length && pct === Math.max(...rates.map((_,j)=>exp[j]/sum*100));
+    return `<div>設定${i+1} (1/${Number(r).toFixed(1)}) : <span style="color:${isMax?'red':'black'}; font-weight:${isMax?'bold':'normal'}">${pct.toFixed(1)}%</span></div>`;
+  }).join("");
+}
+
+/* 表示 */
+function render(){
+  const sum = history.reduce((a,b)=>a+b,0);
+  totalG.textContent = history.length ? sum : 0;
+  avg.textContent = history.length ? "1/"+(sum/history.length).toFixed(1) : "-";
+
+  const s1 = countTier(1);
+  const s7 = countTier(7);
+  const s8 = countTier(8);
+
+  settings.innerHTML = calcSetting();
+
+  // 111Gハマリ
+  const hamaCount = calcHama();
+  const hamaTheory = stepScaleTheory(history.length,2,15);
+  const hamaNum = (history.length > 0 && hamaCount <= hamaTheory.num) 
+                 ? `<span style="color:red;font-weight:bold">${hamaCount}</span>` 
+                 : `<span>${hamaCount}</span>`;
+
+  // 76G連
+  const s1Theory = stepScaleTheory(s1.total,3,4);
+  const s7Theory = stepScaleTheory(s7.total,2,15);
+  const s8Theory = stepScaleTheory(s8.total,1,10);
+
+  const s1Num = (s1.success >= s1Theory.num) ? `<span style="color:red;font-weight:bold">${s1.success}</span>` : `<span>${s1.success}</span>`;
+  const s7Num = (s7.success >= s7Theory.num) ? `<span style="color:red;font-weight:bold">${s7.success}</span>` : `<span>${s7.success}</span>`;
+  const s8Num = (s8.success >= s8Theory.num) ? `<span style="color:red;font-weight:bold">${s8.success}</span>` : `<span>${s8.success}</span>`;
+
+  // 250Gボーナス
+  const bonusTheory = stepScaleTheory(bonus.high,3,5);
+  const bonusNum = (bonus.low >= bonusTheory.num) ? `<span style="color:red;font-weight:bold">${bonus.low}</span>` : `<span>${bonus.low}</span>`;
+
+  analysis.innerHTML = `
+<div>111Gハマリ: ${hamaNum}/${history.length} (理論 ${hamaTheory.text})</div>
+<hr>
+<div>76G以内1連: ${s1Num}/${s1.total} (理論 ${s1Theory.text})</div>
+<div>76G以内7連: ${s7Num}/${s7.total} (理論 ${s7Theory.text})</div>
+<div>76G以内8連: ${s8Num}/${s8.total} (理論 ${s8Theory.text})</div>
+<hr>
+<div>250G以内ボ: ${bonusNum}/${bonus.high} (低域 ${bonusTheory.text})</div>
+`;
+}
+
+render();
+</script>
+</body>
+</html>
