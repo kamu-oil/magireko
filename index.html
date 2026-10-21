@@ -27,10 +27,10 @@
 <div id="analysis"></div>
 
 <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px;">
-  <button onclick="addBonus('low','big')" style="padding:12px;">～250G BIG</button>
-  <button onclick="addBonus('low','reg')" style="padding:12px;">～250G REG</button>
-  <button onclick="addBonus('high','big')" style="padding:12px;">251G～ BIG</button>
-  <button onclick="addBonus('high','reg')" style="padding:12px;">251G～ REG</button>
+  <button onclick="addBonus('low','big')" style="padding:12px;">～250G BB</button>
+  <button onclick="addBonus('high','big')" style="padding:12px;">251G～ BB</button>
+  <button onclick="addBonus('low','reg')" style="padding:12px;">～250G RB</button>
+  <button onclick="addBonus('high','reg')" style="padding:12px;">251G～ RB</button>
 </div>
 
 <script>
@@ -288,7 +288,7 @@ function render(){
     <hr>
 
     <div>～250G: ${lowNum}/${allTotal} (高域 ${bonusTheory.text})</div>
-    <div>BIG比率: ${bigNum}/${allTotal} (高域 ${bigTheory.text})</div>
+    <div>BB比率: ${bigNum}/${allTotal} (高域 ${bigTheory.text})</div>
   `;
 }
 
